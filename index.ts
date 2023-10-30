@@ -92,7 +92,7 @@ class App extends LitElement {
             }
             this.initialPosts = this.initialPosts.sort((a, b) => (b.createdAt as number) - (a.createdAt as number)).reverse();
         } catch (e) {
-            this.error = `Couldn't fetch posts for hashtag ${this.hashtag}`;
+            this.error = `Couldn't fetch posts for hashtag #${this.hashtag}`;
             this.isLoading = false;
             return;
         }
@@ -114,11 +114,11 @@ class App extends LitElement {
                         <a class="text-sm flex align-center justify-center text-primary font-bold text-center" href="/"
                             ><i class="w-[16px] h-[16px] inline-block fill-primary">${unsafeHTML(logoSvg)}</i><span class="ml-2">Skychat</span></a
                         >
-                        <span class="flex-grow text-center">${this.hashtag}</span>
+                        <span class="flex-grow text-center">#${this.hashtag}</span>
                         <theme-toggle absolute="false"></theme-toggle>
                     </div>
                     <p class="text-center mt-4">
-                        You have an <a href="${rootUrl}" target="_blank" class="text-primary">existing thread</a> for ${this.hashtag}
+                        You have an <a href="${rootUrl}" target="_blank" class="text-primary">existing thread</a> for #${this.hashtag}
                     </p>
                     <p class="text-center mt-4">Do you want to add new posts to the existing thread, or start a new thread?</p>
                     <div class="flex flex-col mx-auto gap-4 mt-4">
@@ -207,9 +207,12 @@ class App extends LitElement {
             this.error = "Please specify a hashtag";
             return;
         }
-        if (!this.hashtag.startsWith("#")) {
-            this.hashtag = "#" + this.hashtag;
+        if (this.hashtag.startsWith("#")) {
+            this.hashtag = this.hashtag.substring(1);
         }
+//        if (!this.hashtag.startsWith("#")) {
+//            this.hashtag = "#" + this.hashtag;
+//        }
 
         this.account = this.accountElement?.value ?? null;
         this.password = this.passwordElement?.value ?? null;
@@ -251,7 +254,7 @@ class App extends LitElement {
                 <a class="text-sm flex align-center justify-center text-primary font-bold text-center" href="/"
                     ><i class="w-[16px] h-[16px] inline-block fill-primary">${unsafeHTML(logoSvg)}</i><span class="ml-2">Skychat</span></a
                 >
-                <span class="flex-grow text-center">${this.hashtag}</span>
+                <span class="flex-grow text-center">#${this.hashtag}</span>
                 <theme-toggle absolute="false"></theme-toggle>
             </div>
             <div id="catchup" class="w-full max-w-[590px] hidden absolute top-[3em] flex items-center">
@@ -274,7 +277,7 @@ class App extends LitElement {
                               <textarea
                                   id="message"
                                   class="resize-none outline-none bg-transparent px-2 pt-2 border-t border-gray/50"
-                                  placeholder="Add a post to your thread about ${this.hashtag!}. The hashtag will be added automatically."
+                                  placeholder="Add a post to your thread about #${this.hashtag!}. The hashtag will be added automatically."
                               ></textarea>
                               <span id="count" class="text-end text-xs pr-2 pb-2"></span>
                           </div>
@@ -310,7 +313,7 @@ class App extends LitElement {
                 try {
                     message.disabled = true;
                     sendPost.disabled = true;
-                    const richText = new RichText({ text: message.value + " " + this.hashtag! });
+                    const richText = new RichText({ text: message.value });
                     try {
                         await richText.detectFacets(this.bskyClient!);
                     } catch (e) {
@@ -324,6 +327,7 @@ class App extends LitElement {
                         text: richText.text,
                         facets: richText.facets,
                         createdAt: new Date().toISOString(),
+			tags: [ this.hashtag ],
                     } as any;
                     if (prevRoot) {
                         record = {
@@ -368,7 +372,6 @@ class App extends LitElement {
 
         const renderPost = async (post: Post) => {
             try {
-                if (!post.text.toLowerCase().includes(this.hashtag!.toLowerCase())) return;
                 const author = this.authorCache[post.authorDid] ?? (await getAccount(post.authorDid));
                 this.authorCache[post.authorDid] = author;
                 const postHtml = this.recordPartial(author, post.rkey, post);
@@ -382,12 +385,19 @@ class App extends LitElement {
 
         (async () => {
             for (const post of this.initialPosts) {
-                await renderPost(post);
+                if (post.text.toLowerCase().includes('#' + this.hashtag!.toLowerCase())) {
+                    await renderPost(post);
+		}
             }
 
             const stream = startEventStream(
                 async (post) => {
-                    renderPost(post);
+                    if (
+			post.text.toLowerCase().includes(('#' + this.hashtag!).toLowerCase()) ||
+			((post.tags != undefined) && post.tags.find((element) => this.hashtag!.toLowerCase() == element.toLowerCase()))
+		    ) {
+                        renderPost(post);
+		    }
                 },
                 () => {
                     this.error = `Error, failed to load more posts for hashtag ${this.hashtag}`;
